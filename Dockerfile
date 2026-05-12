@@ -14,7 +14,6 @@ COPY api_server.py cli.py xhs_workflow.py ./
 COPY xhs_agent ./xhs_agent
 COPY static ./static
 COPY examples ./examples
-COPY "XHS Content Agent宣传封面图.png" ./
 
 EXPOSE 8000
 
