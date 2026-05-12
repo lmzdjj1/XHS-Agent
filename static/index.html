@@ -207,6 +207,10 @@
                 </button>
               </div>
               <p class="text-lg font-bold text-gray-900 leading-relaxed">{{ cleanSelectedTitle || '暂未生成标题' }}</p>
+              <div v-if="selectedTitleReason" class="mt-4 rounded-lg bg-gray-50 border border-gray-100 p-3">
+                <p class="text-xs font-medium text-gray-400 mb-1">选择理由</p>
+                <p class="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{{ selectedTitleReason }}</p>
+              </div>
             </div>
 
             <!-- Card: Keywords -->
@@ -245,11 +249,16 @@
                   <h3 class="text-sm font-semibold text-gray-700">去 AI 味最终版</h3>
                   <span class="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs rounded font-medium">核心输出</span>
                 </div>
-                <button @click="copyText(cleanFinalCopy, 'final_copy')" class="text-gray-400 hover:text-xhs transition-colors cursor-pointer" title="复制" aria-label="复制最终文案">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                </button>
+                <div class="flex items-center gap-2">
+                  <button @click="copyText(publishCopyText, 'publish_copy')" class="text-xs text-gray-500 hover:text-xhs transition-colors cursor-pointer" title="复制发布稿">
+                    复制发布稿
+                  </button>
+                  <button @click="copyText(cleanFinalCopy, 'final_copy')" class="text-gray-400 hover:text-xhs transition-colors cursor-pointer" title="复制正文" aria-label="复制最终正文">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                </div>
               </div>
               <div class="mx-5 mb-5 p-5 bg-white rounded-xl border border-gray-100">
                 <div class="flex items-center gap-2 mb-3 pb-3 border-b border-gray-50">
@@ -263,7 +272,20 @@
                     <div class="text-xs text-gray-400">刚刚</div>
                   </div>
                 </div>
-                <p class="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{{ cleanFinalCopy || '暂未生成正文' }}</p>
+                <div class="bg-gray-50 rounded-lg border border-gray-100 p-4 sm:p-5">
+                  <p class="text-xs font-medium text-gray-400 mb-3">发布稿预览</p>
+                  <article class="max-w-3xl">
+                    <h4 v-if="cleanSelectedTitle" class="text-xl sm:text-2xl font-bold text-gray-900 leading-snug mb-4">{{ cleanSelectedTitle }}</h4>
+                    <p class="text-base sm:text-lg text-gray-800 leading-8 whitespace-pre-wrap break-words">{{ cleanFinalCopy || '暂未生成正文' }}</p>
+                    <div v-if="displayTags.length" class="flex flex-wrap gap-2 mt-5 pt-4 border-t border-gray-200">
+                      <span
+                        v-for="(tag, idx) in displayTags"
+                        :key="idx"
+                        class="text-sm text-xhs"
+                      >{{ tag }}</span>
+                    </div>
+                  </article>
+                </div>
               </div>
             </div>
 
@@ -405,6 +427,8 @@
           return stripMarkdown(value)
             .replace(/^[\s\d]+[.、)\]】]\s*/, '')
             .replace(/^[-*]\s*/, '')
+            .replace(/^#+\s*/, '')
+            .replace(/^最佳标题[:：]\s*/, '')
             .replace(/^推荐标题[:：]\s*/, '')
             .replace(/^话题标签[:：]\s*/, '')
             .replace(/^搜索关键词[:：]\s*/, '')
@@ -413,6 +437,33 @@
 
         function unique(items) {
           return [...new Set(items.map(item => item.trim()).filter(Boolean))]
+        }
+
+        function isSectionHeading(value) {
+          const raw = stripMarkdown(value)
+          const line = raw.trim()
+          const normalized = line
+            .replace(/^#+\s*/, '')
+            .replace(/[:：]\s*$/, '')
+            .trim()
+
+          if (!line) return true
+          if (/^[-—]{3,}$/.test(line)) return true
+          if (/^#{1,6}\s+/.test(line)) return true
+
+          return /^(爆文关键词|搜索关键词|关键词|标题候选|标题|最佳标题|选择理由|标签黄金配比|话题标签|避坑检查|核心定位标签|精准热点标签|泛流量标签|推荐标题|内容框架|正文草稿|最终正文|封面图提示词)$/.test(normalized)
+        }
+
+        function isModelExplanationLine(value) {
+          const line = cleanListItem(value)
+          return /^(好的|收到|以下|基于|作为|我将|说明|理由|流量作用|避坑|检查|推荐原因)/.test(line)
+        }
+
+        function cleanKeywordItem(value) {
+          return cleanListItem(value)
+            .replace(/[（(][^）)]*[）)]$/g, '')
+            .replace(/[，,。；;:：]+$/g, '')
+            .trim()
         }
 
         function extractHashtags(...values) {
@@ -426,10 +477,11 @@
         function extractNumberedItems(sectionText, limit = 12) {
           return unique(asText(sectionText)
             .split('\n')
-            .map(cleanListItem)
-            .filter(line => line && !line.startsWith('#') && !/^[-—]{3,}$/.test(line))
-            .filter(line => !/^(好的|以下|搜索关键词|标签黄金配比|避坑检查|流量作用|核心定位标签|精准热点标签|泛流量标签)/.test(line))
-            .filter(line => line.length <= 30)
+            .filter(line => !isSectionHeading(line) && !isModelExplanationLine(line))
+            .map(cleanKeywordItem)
+            .filter(line => line && !line.startsWith('#'))
+            .filter(line => !/[。！？!?]/.test(line))
+            .filter(line => line.length <= 20)
             .slice(0, limit))
         }
 
@@ -437,6 +489,33 @@
           const clean = asText(text)
           const match = clean.match(/(?:搜索关键词|关键词)[\s\S]*?(?=(?:标签黄金配比|话题标签|避坑检查|---|$))/)
           return match ? match[0] : ''
+        }
+
+        function extractTitleSection(text) {
+          const clean = asText(text)
+          const match = clean.match(/(?:标题候选|推荐标题)[\s\S]*?(?=(?:爆文关键词|搜索关键词|标签黄金配比|话题标签|避坑检查|封面图提示词|---|$))/)
+          return match ? match[0] : clean
+        }
+
+        function parseSelectedTitle(value) {
+          const text = stripMarkdown(value)
+          if (!text) return { title: '', reason: '' }
+
+          const inlineMatch = text.match(/(?:最佳标题|推荐标题)[:：]\s*([\s\S]*?)(?:\s*(?:选择理由|推荐原因)[:：]\s*([\s\S]*))?$/)
+          if (inlineMatch) {
+            return {
+              title: cleanListItem(inlineMatch[1]).replace(/[“”"「」]/g, '').trim(),
+              reason: stripMarkdown(inlineMatch[2] || '').trim(),
+            }
+          }
+
+          const reasonMatch = text.match(/(?:选择理由|推荐原因)[:：]\s*([\s\S]*)/)
+          const titlePart = reasonMatch ? text.slice(0, reasonMatch.index).trim() : text
+
+          return {
+            title: cleanListItem(titlePart).replace(/[“”"「」]/g, '').trim(),
+            reason: stripMarkdown(reasonMatch?.[1] || '').trim(),
+          }
         }
 
         function removePublishMeta(text) {
@@ -449,17 +528,23 @@
         // --- Computed: split titles into lines ---
         const titleLines = computed(() => {
           if (!result.value?.titles) return []
-          return asText(result.value.titles)
+          return extractTitleSection(result.value.titles)
             .split('\n')
+            .filter(line => !isSectionHeading(line) && !isModelExplanationLine(line))
             .map(cleanListItem)
-            .filter(line => line && !/^(标题候选|以下|推荐|最佳)/.test(line))
+            .filter(line => line && !isSectionHeading(line))
+            .filter(line => !/^(标题候选|以下|推荐|最佳)/.test(line))
             .filter(line => line.length <= 60)
         })
 
         const cleanSelectedTitle = computed(() => {
-          const selected = cleanListItem(result.value?.selected_title)
-          if (selected) return selected
+          const selected = parseSelectedTitle(result.value?.selected_title).title
+          if (selected && !isSectionHeading(selected) && !isModelExplanationLine(selected)) return selected
           return titleLines.value[0] || ''
+        })
+
+        const selectedTitleReason = computed(() => {
+          return parseSelectedTitle(result.value?.selected_title).reason
         })
 
         const cleanFinalCopy = computed(() => removePublishMeta(result.value?.final_copy))
@@ -484,6 +569,14 @@
           return parts.join('\n')
         })
 
+        const publishCopyText = computed(() => {
+          const parts = []
+          if (cleanSelectedTitle.value) parts.push(cleanSelectedTitle.value)
+          if (cleanFinalCopy.value) parts.push(cleanFinalCopy.value)
+          if (displayTags.value.length) parts.push(displayTags.value.join(' '))
+          return parts.join('\n\n')
+        })
+
         onMounted(() => {
           checkHealth()
           healthTimer = setInterval(checkHealth, 15000)
@@ -491,8 +584,8 @@
 
         return {
           instruction, result, loading, healthOk, toasts,
-          titleLines, cleanSelectedTitle, cleanFinalCopy, cleanCoverPrompt,
-          displayTags, searchKeywords, keywordCopyText,
+          titleLines, cleanSelectedTitle, selectedTitleReason, cleanFinalCopy, cleanCoverPrompt,
+          displayTags, searchKeywords, keywordCopyText, publishCopyText,
           submit, copyText,
         }
       }

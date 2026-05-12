@@ -135,7 +135,7 @@ XHS_BRAND_BOOK_2=AI 辅助创作
 XHS_BRAND_BOOK_3=工作流笔记
 ```
 
-复制后请将 `DEEPSEEK_API_KEY` 替换为自己的 API Key。如果不设置 `DEEPSEEK_MODEL`，代码会使用 `deepseek-v4-pro` 作为默认模型。
+复制后请将 `DEEPSEEK_API_KEY` 替换为自己的 API Key。如果不设置 `DEEPSEEK_MODEL`，代码会使用 `deepseek-v4-flash` 作为默认模型。
 
 如果只是本地演示或测试，可以保留：
 
