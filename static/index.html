@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>XHS Content Agent</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            xhs: '#FF2442',
+            'xhs-light': '#FFF0F2',
+            'xhs-dark': '#D91A37',
+          },
+          fontFamily: {
+            sans: ['"Noto Sans SC"', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    [v-cloak] { display: none; }
+    body { font-family: 'Noto Sans SC', system-ui, -apple-system, sans-serif; }
+    .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+    .fade-enter-from, .fade-leave-to { opacity: 0; }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .skeleton {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+    .xhs-card {
+      background: white;
+      border-radius: 0.75rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+      transition: box-shadow 0.2s ease;
+    }
+    .xhs-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .note-preview {
+      background: white;
+      border-radius: 0.75rem;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .toast-enter-active { transition: all 0.3s ease; }
+    .toast-leave-active { transition: all 0.3s ease; }
+    .toast-enter-from { transform: translateX(100%); opacity: 0; }
+    .toast-leave-to { transform: translateX(100%); opacity: 0; }
+    textarea:focus { outline: none; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="app" v-cloak>
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-100 sticky top-0 z-30">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 bg-xhs rounded-lg flex items-center justify-center">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+          </div>
+          <h1 class="text-lg font-bold text-gray-900">XHS Content Agent</h1>
+        </div>
+        <div class="flex items-center gap-2 text-sm">
+          <span class="w-2 h-2 rounded-full" :class="healthOk ? 'bg-green-500' : 'bg-red-400'"></span>
+          <span class="text-gray-500">{{ healthOk ? '服务正常' : '服务离线' }}</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+      <div class="flex flex-col md:flex-row gap-6">
+        <!-- Left Sidebar: Input -->
+        <div class="w-full md:w-[380px] md:flex-shrink-0 md:sticky md:top-[60px] md:self-start">
+          <div class="xhs-card p-5">
+            <h2 class="text-sm font-semibold text-gray-700 mb-3">输入指令</h2>
+            <textarea
+              v-model="instruction"
+              class="w-full h-36 p-3 bg-gray-50 rounded-lg border border-gray-200 text-sm text-gray-800 resize-none focus:border-xhs focus:ring-1 focus:ring-xhs/20 transition-colors"
+              placeholder="描述你想要生成的小红书笔记内容...&#10;&#10;例如：写一篇关于云南旅游的小红书笔记，重点推荐大理和丽江"
+              @keydown.ctrl.enter="submit"
+              @keydown.meta.enter="submit"
+            ></textarea>
+            <div class="flex items-center justify-between mt-3">
+              <span class="text-xs text-gray-400">Ctrl + Enter 发送</span>
+              <button
+                @click="submit"
+                :disabled="loading || !instruction.trim()"
+                class="px-5 py-2 bg-xhs text-white text-sm font-medium rounded-lg hover:bg-xhs-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              >
+                <svg v-if="loading" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                {{ loading ? '生成中...' : '开始生成' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick tips -->
+          <div v-if="!result && !loading" class="xhs-card p-5 mt-4">
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">使用提示</h3>
+            <ul class="space-y-2 text-sm text-gray-600">
+              <li class="flex items-start gap-2">
+                <span class="text-xhs mt-0.5">1.</span>
+                输入你想要创作的笔记主题和方向
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-xhs mt-0.5">2.</span>
+                AI 会自动生成内容框架、标题、关键词
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-xhs mt-0.5">3.</span>
+                最终输出去 AI 味的拟人化笔记文案
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-xhs mt-0.5">4.</span>
+                还会生成封面图的绘画提示词
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Right: Results -->
+        <div class="flex-1 min-w-0">
+          <!-- Empty State -->
+          <div v-if="!result && !loading" class="xhs-card p-16 text-center">
+            <div class="w-16 h-16 bg-xhs-light rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <svg class="w-8 h-8 text-xhs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+              </svg>
+            </div>
+            <h3 class="text-gray-700 font-medium mb-1">等待生成</h3>
+            <p class="text-gray-400 text-sm">在左侧输入指令，点击生成按钮开始创作</p>
+          </div>
+
+          <!-- Loading State -->
+          <div v-if="loading" class="space-y-4">
+            <div class="flex items-center gap-3 mb-2">
+              <div class="pulse-dot w-2 h-2 bg-xhs rounded-full"></div>
+              <span class="text-sm text-gray-500">AI 正在创作中...</span>
+            </div>
+            <div v-for="i in 4" :key="i" class="xhs-card p-5">
+              <div class="skeleton h-4 w-24 rounded mb-4"></div>
+              <div class="skeleton h-3 w-full rounded mb-2"></div>
+              <div class="skeleton h-3 w-5/6 rounded mb-2"></div>
+              <div class="skeleton h-3 w-4/6 rounded"></div>
+            </div>
+          </div>
+
+          <!-- Results -->
+          <div v-if="result && !loading" class="space-y-4">
+            <!-- Source badge -->
+            <div class="flex items-center gap-2 text-sm text-gray-500">
+              <span class="px-2 py-0.5 bg-xhs-light text-xhs text-xs font-medium rounded-full">
+                {{ result.source === 'openclaw' ? 'OpenClaw' : '文本指令' }}
+              </span>
+              <span>生成完成</span>
+            </div>
+
+            <!-- Card: Titles -->
+            <div v-if="titleLines.length" class="xhs-card p-5">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold text-gray-700">标题候选</h3>
+                <button @click="copyText(titleLines.join('\n'), 'titles')" class="text-gray-400 hover:text-xhs transition-colors cursor-pointer" title="复制" aria-label="复制标题候选">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+              </div>
+              <div class="space-y-2">
+                <div v-for="(line, idx) in titleLines" :key="idx" class="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors">
+                  <span class="flex-shrink-0 w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs font-medium text-gray-500">{{ idx + 1 }}</span>
+                  <span class="text-sm text-gray-700 pt-0.5">{{ line }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card: Selected Title (highlighted) -->
+            <div class="xhs-card p-5 border-l-4 border-xhs">
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                  <h3 class="text-sm font-semibold text-gray-700">选中标题</h3>
+                  <span class="px-1.5 py-0.5 bg-xhs text-white text-xs rounded font-medium">最佳</span>
+                </div>
+                <button @click="copyText(cleanSelectedTitle, 'selected_title')" class="text-gray-400 hover:text-xhs transition-colors cursor-pointer" title="复制" aria-label="复制选中标题">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+              </div>
+              <p class="text-lg font-bold text-gray-900 leading-relaxed">{{ cleanSelectedTitle || '暂未生成标题' }}</p>
+            </div>
+
+            <!-- Card: Keywords -->
+            <div v-if="displayTags.length || searchKeywords.length" class="xhs-card p-5">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold text-gray-700">关键词与标签</h3>
+                <button @click="copyText(keywordCopyText, 'keywords')" class="text-gray-400 hover:text-xhs transition-colors cursor-pointer" title="复制" aria-label="复制关键词与标签">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <span
+                  v-for="(tag, idx) in displayTags"
+                  :key="idx"
+                  class="px-3 py-1 text-sm rounded-full bg-xhs-light text-xhs"
+                >{{ tag }}</span>
+              </div>
+              <div v-if="searchKeywords.length" class="mt-4 pt-4 border-t border-gray-100">
+                <p class="text-xs font-medium text-gray-400 mb-2">搜索关键词</p>
+                <div class="flex flex-wrap gap-2">
+                  <span
+                    v-for="(word, idx) in searchKeywords"
+                    :key="idx"
+                    class="px-2.5 py-1 text-sm rounded-full bg-gray-100 text-gray-600"
+                  >{{ word }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card: Final Copy (Hero - XHS Note Preview) -->
+            <div class="xhs-card overflow-hidden">
+              <div class="px-5 pt-5 pb-3 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <h3 class="text-sm font-semibold text-gray-700">去 AI 味最终版</h3>
+                  <span class="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs rounded font-medium">核心输出</span>
+                </div>
+                <button @click="copyText(cleanFinalCopy, 'final_copy')" class="text-gray-400 hover:text-xhs transition-colors cursor-pointer" title="复制" aria-label="复制最终文案">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+              </div>
+              <div class="mx-5 mb-5 p-5 bg-white rounded-xl border border-gray-100">
+                <div class="flex items-center gap-2 mb-3 pb-3 border-b border-gray-50">
+                  <div class="w-8 h-8 bg-gradient-to-br from-xhs to-pink-400 rounded-full flex items-center justify-center">
+                    <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="text-xs font-medium text-gray-800">XHS 创作者</div>
+                    <div class="text-xs text-gray-400">刚刚</div>
+                  </div>
+                </div>
+                <p class="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{{ cleanFinalCopy || '暂未生成正文' }}</p>
+              </div>
+            </div>
+
+            <!-- Card: Cover Prompt -->
+            <div class="xhs-card p-5">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold text-gray-700">封面图提示词</h3>
+                <button @click="copyText(cleanCoverPrompt, 'cover_prompt')" class="text-gray-400 hover:text-xhs transition-colors cursor-pointer" title="复制" aria-label="复制封面图提示词">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+              </div>
+              <div class="bg-gray-900 rounded-lg p-4 overflow-x-auto">
+                <pre class="text-sm text-green-400 font-mono whitespace-pre-wrap break-words leading-relaxed">{{ cleanCoverPrompt }}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Toast Notifications -->
+    <div class="fixed bottom-6 right-6 z-50 space-y-2">
+      <div
+        v-for="toast in toasts"
+        :key="toast.id"
+        class="flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-sm transition-all"
+        :class="{
+          'bg-green-50 text-green-700 border border-green-200': toast.type === 'success',
+          'bg-red-50 text-red-700 border border-red-200': toast.type === 'error',
+          'bg-gray-800 text-white': toast.type === 'info',
+        }"
+      >
+        <svg v-if="toast.type === 'success'" class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+        <svg v-if="toast.type === 'error'" class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+        {{ toast.message }}
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, computed, onMounted } = Vue
+
+    createApp({
+      setup() {
+        const instruction = ref('')
+        const result = ref(null)
+        const loading = ref(false)
+        const healthOk = ref(false)
+        const toasts = ref([])
+
+        let toastId = 0
+        let healthTimer = null
+
+        // --- Toast ---
+        function showToast(message, type = 'info', duration = 3000) {
+          const id = ++toastId
+          toasts.value.push({ id, message, type })
+          setTimeout(() => {
+            toasts.value = toasts.value.filter(t => t.id !== id)
+          }, duration)
+        }
+
+        // --- Health check ---
+        async function checkHealth() {
+          try {
+            const res = await fetch('/health')
+            healthOk.value = res.ok
+          } catch {
+            healthOk.value = false
+          }
+        }
+
+        // --- Submit ---
+        async function submit() {
+          const text = instruction.value.trim()
+          if (!text || loading.value) return
+
+          loading.value = true
+          result.value = null
+
+          try {
+            const res = await fetch('/invoke', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ instruction: text }),
+            })
+
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({ detail: res.statusText }))
+              throw new Error(err.detail || `HTTP ${res.status}`)
+            }
+
+            result.value = await res.json()
+            showToast('内容生成成功', 'success')
+          } catch (err) {
+            showToast(err.message || '生成失败，请重试', 'error')
+          } finally {
+            loading.value = false
+          }
+        }
+
+        // --- Copy ---
+        async function copyText(text, field) {
+          const value = String(text || '').trim()
+          if (!value) {
+            showToast('没有可复制内容', 'error', 2000)
+            return
+          }
+
+          try {
+            await navigator.clipboard.writeText(value)
+            showToast('已复制到剪贴板', 'success', 2000)
+          } catch {
+            showToast('复制失败', 'error', 2000)
+          }
+        }
+
+        function asText(value) {
+          if (Array.isArray(value)) return value.join('\n')
+          if (value && typeof value === 'object') return JSON.stringify(value, null, 2)
+          return String(value || '')
+        }
+
+        function stripMarkdown(value) {
+          return asText(value)
+            .replace(/\*\*/g, '')
+            .replace(/`/g, '')
+            .replace(/[ \t]+$/gm, '')
+            .trim()
+        }
+
+        function cleanListItem(value) {
+          return stripMarkdown(value)
+            .replace(/^[\s\d]+[.、)\]】]\s*/, '')
+            .replace(/^[-*]\s*/, '')
+            .replace(/^推荐标题[:：]\s*/, '')
+            .replace(/^话题标签[:：]\s*/, '')
+            .replace(/^搜索关键词[:：]\s*/, '')
+            .trim()
+        }
+
+        function unique(items) {
+          return [...new Set(items.map(item => item.trim()).filter(Boolean))]
+        }
+
+        function extractHashtags(...values) {
+          const text = values.map(asText).join('\n')
+          const matches = text.match(/#[^\s#，,。；;、）)\]】"'“”]+/g) || []
+          return unique(matches
+            .map(tag => tag.replace(/[*_`~]/g, '').replace(/[.。!！?？:：;；]+$/g, ''))
+            .filter(tag => tag.length > 1 && /[\u4e00-\u9fa5A-Za-z0-9]/.test(tag)))
+        }
+
+        function extractNumberedItems(sectionText, limit = 12) {
+          return unique(asText(sectionText)
+            .split('\n')
+            .map(cleanListItem)
+            .filter(line => line && !line.startsWith('#') && !/^[-—]{3,}$/.test(line))
+            .filter(line => !/^(好的|以下|搜索关键词|标签黄金配比|避坑检查|流量作用|核心定位标签|精准热点标签|泛流量标签)/.test(line))
+            .filter(line => line.length <= 30)
+            .slice(0, limit))
+        }
+
+        function extractSearchKeywordSection(text) {
+          const clean = asText(text)
+          const match = clean.match(/(?:搜索关键词|关键词)[\s\S]*?(?=(?:标签黄金配比|话题标签|避坑检查|---|$))/)
+          return match ? match[0] : ''
+        }
+
+        function removePublishMeta(text) {
+          return stripMarkdown(text)
+            .replace(/\n*推荐标题[:：][\s\S]*$/m, '')
+            .replace(/\n*话题标签[:：][\s\S]*$/m, '')
+            .trim()
+        }
+
+        // --- Computed: split titles into lines ---
+        const titleLines = computed(() => {
+          if (!result.value?.titles) return []
+          return asText(result.value.titles)
+            .split('\n')
+            .map(cleanListItem)
+            .filter(line => line && !/^(标题候选|以下|推荐|最佳)/.test(line))
+            .filter(line => line.length <= 60)
+        })
+
+        const cleanSelectedTitle = computed(() => {
+          const selected = cleanListItem(result.value?.selected_title)
+          if (selected) return selected
+          return titleLines.value[0] || ''
+        })
+
+        const cleanFinalCopy = computed(() => removePublishMeta(result.value?.final_copy))
+
+        const cleanCoverPrompt = computed(() => stripMarkdown(result.value?.cover_prompt))
+
+        const displayTags = computed(() => {
+          return extractHashtags(result.value?.final_copy, result.value?.keywords).slice(0, 12)
+        })
+
+        const searchKeywords = computed(() => {
+          const explicitSection = extractSearchKeywordSection(result.value?.keywords)
+          return extractNumberedItems(explicitSection || result.value?.keywords, 10)
+            .filter(word => !word.includes('流量作用'))
+            .filter(word => !displayTags.value.includes(word))
+        })
+
+        const keywordCopyText = computed(() => {
+          const parts = []
+          if (displayTags.value.length) parts.push(displayTags.value.join(' '))
+          if (searchKeywords.value.length) parts.push(`搜索关键词：${searchKeywords.value.join('、')}`)
+          return parts.join('\n')
+        })
+
+        onMounted(() => {
+          checkHealth()
+          healthTimer = setInterval(checkHealth, 15000)
+        })
+
+        return {
+          instruction, result, loading, healthOk, toasts,
+          titleLines, cleanSelectedTitle, cleanFinalCopy, cleanCoverPrompt,
+          displayTags, searchKeywords, keywordCopyText,
+          submit, copyText,
+        }
+      }
+    }).mount('#app')
+  </script>
+</body>
+</html>
