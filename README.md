@@ -227,28 +227,6 @@ uvicorn api_server:app --host 0.0.0.0 --port 8000
 
 `.dockerignore` 会排除 `.env`、虚拟环境、缓存和本地日志，避免把密钥或无关文件打进镜像。
 
-### 1Panel 部署说明
-
-1Panel 的“编排”页面需要填写的是 `docker-compose.yml` 内容，不是 `Dockerfile` 内容。
-
-如果使用截图里的“编辑”方式，需要保证服务器上的编排目录里同时存在这些文件：
-
-```text
-Dockerfile
-docker-compose.yml
-.env
-api_server.py
-cli.py
-xhs_workflow.py
-requirements.txt
-static/
-xhs_agent/
-examples/
-XHS Content Agent宣传封面图.png
-```
-
-然后在编辑器中填写 `docker-compose.yml` 内容即可。也可以使用“路径选择”，选择包含 `docker-compose.yml` 和 `Dockerfile` 的项目目录。
-
 ## CLI 使用
 
 普通运行：
