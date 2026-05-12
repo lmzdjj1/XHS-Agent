@@ -1,0 +1,12 @@
+services:
+  xhs-content-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: xhs-content-agent:latest
+    container_name: xhs-content-agent
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"

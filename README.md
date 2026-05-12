@@ -178,6 +178,77 @@ http://127.0.0.1:8000
 
 前端会对模型返回内容做轻量清洗，例如去掉 Markdown 加粗标记、编号、标签解释段落，只保留适合直接使用的主要内容。
 
+## Docker 部署
+
+项目提供了 `Dockerfile` 和 `docker-compose.yml`，可以直接构建镜像并通过 `.env` 注入运行时配置。
+
+构建镜像：
+
+```powershell
+docker build -t xhs-content-agent .
+```
+
+使用 `.env` 启动容器：
+
+```powershell
+docker run --rm -p 8000:8000 --env-file .env xhs-content-agent
+```
+
+也可以使用 Docker Compose：
+
+```powershell
+docker compose up -d --build
+```
+
+打开页面：
+
+```text
+http://127.0.0.1:8000
+```
+
+如果只想用 mock 模式快速演示，可以确保 `.env` 中包含：
+
+```env
+XHS_WORKFLOW_MOCK=1
+```
+
+如果要调用真实 DeepSeek 模型，请设置：
+
+```env
+XHS_WORKFLOW_MOCK=0
+DEEPSEEK_API_KEY=your_real_api_key
+```
+
+容器默认启动命令是：
+
+```text
+uvicorn api_server:app --host 0.0.0.0 --port 8000
+```
+
+`.dockerignore` 会排除 `.env`、虚拟环境、缓存和本地日志，避免把密钥或无关文件打进镜像。
+
+### 1Panel 部署说明
+
+1Panel 的“编排”页面需要填写的是 `docker-compose.yml` 内容，不是 `Dockerfile` 内容。
+
+如果使用截图里的“编辑”方式，需要保证服务器上的编排目录里同时存在这些文件：
+
+```text
+Dockerfile
+docker-compose.yml
+.env
+api_server.py
+cli.py
+xhs_workflow.py
+requirements.txt
+static/
+xhs_agent/
+examples/
+XHS Content Agent宣传封面图.png
+```
+
+然后在编辑器中填写 `docker-compose.yml` 内容即可。也可以使用“路径选择”，选择包含 `docker-compose.yml` 和 `Dockerfile` 的项目目录。
+
 ## CLI 使用
 
 普通运行：
@@ -394,13 +465,11 @@ XHS_BRAND_BOOK_3=工作流笔记
 - 后端响应字段目前仍是字符串，前端需要做轻量清洗和提取。
 - mock 模式只返回 Prompt 摘要，不代表真实生成质量。
 - 当前没有提交自动化测试目录。
-- 当前没有 Dockerfile。
 - 前端使用 CDN，离线环境或生产部署时建议改成本地构建资源。
 
 ## 后续计划
 
 - 增加 `tests/`，覆盖输入适配、mock workflow、API health
-- 增加 Dockerfile，支持一键部署
 - 增加内容质量评测样例，记录标题、标签、正文改写效果
 - 增加更多平台内容模板，例如公众号、知乎、视频脚本
 - 将 `/invoke` 响应升级为更明确的结构化 schema
